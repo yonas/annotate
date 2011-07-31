@@ -1,0 +1,5 @@
+name = Annotate 
+description = Allows users to annotate nodes.
+package = Annotate
+dependencies[] = views
+core = 7.x

@@ -1,0 +1,89 @@
+<?php
+
+/**
+ * Implementation of hook_schema()
+ */
+function annotate_schema() {
+  $schema['annotate'] = array(
+    'description' => 'stores notes on a one note per user per node base.',
+    'fields' => array(
+      'uid' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0),
+      'nid' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0),
+      'visibility' => array('type' => 'int', 'unsigned' => TRUE, 'default' => 0),
+      'note_format' => array('type' => 'varchar', 'length' => 255, 'not null' => FALSE),
+      'note' => array('type' => 'text', 'not null' => TRUE),
+      'timestamp' => array('type' => 'int', 'unsigned' => TRUE, 'not null' => TRUE, 'default' => 0),
+    ),
+    'indexes' => array(
+      'uid' => array('uid'),
+      'nid' => array('nid'),
+    ),
+    'primary key' => array('uid', 'nid', 'timestamp'),
+  );
+
+  return $schema;
+}
+
+function annotate_update_6200() {
+	$ret = array();
+	db_rename_table($ret, 'annotations', 'annotate');
+	return $ret;
+}
+
+function annotate_update_6101() {
+  // delete menu 'admin/settings/annotate']
+  menu_rebuild();
+
+  // we need to change variables into content type related vars
+  $annotate_nodetypes = variable_get('annotate_nodetypes', array('story'));
+  $annotate_nodetypes_multiple = variable_get('annotate_nodetypes_multiple', array());
+
+  $annotate_show_expanded = variable_get('annotate_show_expanded', FALSE);
+  $annotate_show_multi_expanded = variable_get('annotate_show_multi_expanded', FALSE);
+
+  $annotate_visibility = variable_get('annotate_visibility', 0);
+  $annotate_visibility_force = variable_get('annotate_visibility_force', FALSE);
+
+  $types = node_type_get_names();
+  foreach ($annotate_nodetypes as $type) {
+    if (isset($types[$type])) {
+      variable_set( 'annotate_allow_' . $type, TRUE);
+      variable_set( 'annotate_display_expanded_' . $type, $annotate_show_expanded);
+      variable_set( 'annotate_allow_multiple_' . $type, in_array($type, $annotate_nodetypes_multiple));
+      variable_set( 'annotate_display_multi_expanded_' . $type, $annotate_show_expanded);
+      variable_set( 'annotate_default_visibility_' . $type, $annotate_visibility);
+      variable_set( 'annotate_visibility_force_' . $type, $annotate_visibility_force);
+    }
+  }
+
+  variable_del('annotate_show_expanded');
+  variable_del('annotate_nodetypes');
+  variable_del('annotate_show_multi_expanded');
+  variable_del('annotate_nodetypes_multiple');
+  variable_del('annotate_visibility');
+  variable_del('annotate_visibility_force');
+
+  return array();
+}
+
+function annotate_update_6100() {
+  $ret = array();
+  db_drop_primary_key($ret, 'annotations');
+  db_add_primary_key($ret, 'annotations', array('uid', 'nid', 'timestamp'));
+  return $ret;
+}
+
+/**
+ * Implementation of hook_install()
+ */
+function annotate_install() {
+}
+
+/**
+ * Implementation of hook_uninstall()
+ */
+function annotate_uninstall() {
+  variable_del('annotate_show_expanded');
+  variable_del('annotate_nodetypes');
+  variable_del('annotate_nodetypes_multiple');
+}

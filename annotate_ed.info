@@ -1,0 +1,5 @@
+name = Editorial Annotation
+description = Allows users to make an editorial comment on a node
+package = Annotate
+core = 7.x
+configure = admin/config/annotate/editorial
