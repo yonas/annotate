@@ -32,6 +32,7 @@ function annotate_menu() {
     'page arguments' => array(1),
     'access callback' => 'annotate_node_has_annotations_access',
     'access arguments' => array(1),
+    'weight' => 1,
     'type' => MENU_LOCAL_TASK,
   );
 
