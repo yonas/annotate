@@ -207,11 +207,10 @@ function _annotate_forms($node) {
   $forms = "";
   foreach ($node->notes as $index => $note) {
     if (!isset($note->uid) || ($note->uid == $user->uid)) {
-	      //$forms .= drupal_get_form('annotate_private_entry_form_' . $note->timestamp, $note);
  	if (isset($note->timestamp))
 		$forms .= drupal_render(drupal_get_form('annotate_private_entry_form_' . $note->timestamp, $note));
 	else
-		$forms .= drupal_render(drupal_get_form('annotate_private_entry_form', $note));
+		$forms .= drupal_render(drupal_get_form('annotate_private_entry_form_new_note', $note));
     }
     else {
       $form = array();
@@ -340,24 +339,16 @@ function annotate_form_alter(&$form, $form_state, $form_id) {
 }
 
 /**
- * Implementation of hook_user()
+ * Implementation of hook_user_delete()
  *
  * We need to delete the user annotation when a user is deleted.
  *
- * @param string $op
  * @param array $edit
  * @param object $account
  * @param string $category
  */
-function annotate_user($op, &$edit, &$account, $category = NULL) {
-  switch ($op) {
-    case 'delete':
+function annotate_user_delete(&$edit, $account, $category) {
       _annotate_user_delete( $account);
-      break;
-
-    default:
-      break;
-  }
 }
 
 /*
@@ -383,6 +374,8 @@ function annotate_forms($form_id) {
  * The fieldset collapse if no annotation is made and allowed
  */
 function annotate_private_entry_form($form, &$form_state, $note) {
+  $is_new_note = !isset($note->timestamp);
+
   $form['annotate'] = array(
     '#type' => 'fieldset',
     '#title' => theme('annotate_fieldset_title', (array)$note),
@@ -394,7 +387,7 @@ function annotate_private_entry_form($form, &$form_state, $note) {
 
   $form['annotate']['timestamp'] = array(
     '#type' => 'value',
-    '#value' => isset($note->revision_timestamp) ? $note->revision_timestamp : '',
+    '#value' => isset($note->timestamp) ? $note->timestamp : '',
   );
 
   $form['annotate']['uid'] = array(
@@ -436,7 +429,7 @@ function annotate_private_entry_form($form, &$form_state, $note) {
 
   $form['annotate']['submit'] = array(
     '#type' => 'submit',
-    '#value' => t('Update')
+    '#value' => $is_new_note ? t('Save') : t('Update'),
   );
 
   // Make sure the correct submit handle is called.
@@ -445,12 +438,23 @@ function annotate_private_entry_form($form, &$form_state, $note) {
   );
 
   // Add a delete link
-  if (isset($note->timestamp)) {
+  if (!$is_new_note) {
     $form['annotate']['delete'] = array(
-      '#value' => l(t('delete'), 'node/' . $note->nid . '/annotations/' . $note->uid . '/delete/' . $note->timestamp)
+      '#type' => 'submit',
+      '#value' => t('delete'),
+      '#submit' => array('_annotate_delete_note'),
+    );
+
+    $form['annotate']['delete_url'] = array(
+      '#type' => 'value',
+      '#value' => 'node/' . $note->nid . '/annotations/' . $note->uid . '/delete/' . $note->timestamp,
     );
   }
   return $form;
+}
+
+function _annotate_delete_note(&$form, &$form_state) {
+	$form_state['redirect'] = $form_state['values']['delete_url'];
 }
 
 function _annotate_get_visibility_list() {
@@ -481,7 +485,10 @@ function annotate_private_entry_form_submit($form, &$form_state) {
               'uid' => $user->uid, 'nid' => $nid, 'note_format' => $note_format, 'note' => $note, 'visibility' => $visibility, 'timestamp' => time()))
          ->execute();
 
-    drupal_set_message(t('Your annotation was saved.'));
+    if ($timestamp)
+	    drupal_set_message(t('Your annotation was updated.'));
+    else
+	    drupal_set_message(t('Your annotation was saved.'));
   }
   else {
     drupal_set_message(t('Your annotation is deleted.'));
@@ -666,7 +673,7 @@ function _annotate_visibility_to_text( $visibility) {
 function _annotate_node_delete( &$node) {
   $nid = $node->nid;
   if (_annotate_exists_by_node( $nid)) {
-    db_query("DELETE FROM {annotate} WHERE nid = %d", $nid);
+    db_query("DELETE FROM {annotate} WHERE nid = :nid", array(':nid' => $nid));
     drupal_set_message(t('Annotations deleted for node %nid.', array('%nid' => $nid)));
   }
 }
@@ -678,7 +685,7 @@ function _annotate_node_delete( &$node) {
  * @return boolean
  */
 function _annotate_exists_by_node( $nid) {
-  $result = db_query("SELECT COUNT(*) AS num FROM {annotate} WHERE nid =%d", $nid);
+  $result = db_query("SELECT COUNT(*) AS num FROM {annotate} WHERE nid = :nid", array(':nid' => $nid));
   $row = $result->fetchAssoc();
   return $row['num'] > 0;
 }
@@ -691,8 +698,8 @@ function _annotate_exists_by_node( $nid) {
 function _annotate_user_delete( &$account) {
   $uid = $account->uid;
   if (_annotate_exists_by_user( $uid)) {
-    db_query("DELETE FROM {annotate} WHERE uid = %d", $uid);
-    drupal_set_message(t('Annotations deleted for user %uid.', array( '%uid' => $uid)));
+    db_query("DELETE FROM {annotate} WHERE uid = :uid", array(':uid' => $uid));
+    drupal_set_message(t('Annotations deleted for user %uid.', array('%uid' => $uid)));
   }
 }
 
@@ -703,13 +710,13 @@ function _annotate_user_delete( &$account) {
  * @return boolean
  */
 function _annotate_exists_by_user( $uid) {
-  $result = db_query("SELECT COUNT(*) AS num FROM {annotate} WHERE uid =%d", $uid);
+  $result = db_query("SELECT COUNT(*) AS num FROM {annotate} WHERE uid = :uid", array(':uid' => $uid));
   $row = $result->fetchAssoc();
   return $row['num'] > 0;
 }
 
 function _annotate_exists_by_node_by_user( $nid, $uid) {
-  $result = db_query("SELECT COUNT(*) AS num FROM {annotate} WHERE nid = %d AND uid =%d", $nid, $uid);
+  $result = db_query("SELECT COUNT(*) AS num FROM {annotate} WHERE nid = :nid AND uid = :uid", array(':nid' => $nid, ':uid' => $uid));
   $row = $result->fetchAssoc();
   return $row['num'] > 0;
 }
@@ -763,7 +770,7 @@ function annotate_delete_access($nid, $uid) {
   return $user->uid == $uid && _annotate_exists_by_node_by_user($nid, $uid);
 }
 
-function annotate_delete(&$form_state, $nid, $uid, $timestamp) {
+function annotate_delete($form, &$form_state, $nid, $uid, $timestamp) {
   $note = _annotate_get_note($nid, $uid, $timestamp);
 
   $ellips = '';
@@ -800,11 +807,8 @@ function annotate_delete(&$form_state, $nid, $uid, $timestamp) {
  * Deletion an annotation
  */
 function annotate_delete_submit($form, &$form_state) {
-  db_query("DELETE FROM {annotate} WHERE nid = %d AND uid = %d AND timestamp = %d"
-    , $form_state['values']['nid']
-    , $form_state['values']['uid']
-    , $form_state['values']['timestamp']
-  );
+  db_query("DELETE FROM {annotate} WHERE nid = :nid AND uid = :uid AND timestamp = :timestamp",
+           array(':nid' => $form_state['values']['nid'], ':uid' => $form_state['values']['uid'], ':timestamp' => $form_state['values']['timestamp']));
   drupal_set_message(t('The note %name has been removed.', array('%name' => $form_state['values']['info'])));
   $form_state['redirect'] = 'node/' . $form_state['values']['nid'];
   return;
